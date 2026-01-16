@@ -1,0 +1,163 @@
+/* Base */
+.dashboard {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background-color: #f4f6f8;
+  color: #333;
+  padding: 25px;
+  min-height: 100vh;
+}
+
+/* FILTROS */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: flex-end;
+  margin-bottom: 15px;
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #555;
+}
+
+.filters input[type="date"] {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.filters input[type="date"]:focus {
+  outline: none;
+  border-color: #8884d8;
+  box-shadow: 0 0 5px rgba(136, 132, 216, 0.3);
+}
+
+/* Botones */
+.filter-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.filters button {
+  padding: 9px 20px;
+  background-color: #0088FE;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.filters button:hover {
+  background-color: #0066c0;
+}
+
+.clear-btn {
+  background-color: #FF6B6B;
+}
+
+.clear-btn:hover {
+  background-color: #e03e3e;
+}
+
+/* Título rango de fechas */
+.date-range {
+  margin-bottom: 25px;
+  font-weight: 500;
+  font-size: 1rem;
+  color: #444;
+}
+
+.date-range span {
+  font-weight: 600;
+  color: #0088FE;
+}
+
+/* SECCIÓN DE GRÁFICAS */
+.charts-section h2 {
+  margin-top: 40px;
+  margin-bottom: 20px;
+  font-size: 1.25rem;
+  color: #222;
+  font-weight: 600;
+}
+
+/* Contenedores de gráficas */
+.responsive-container,
+.pie-container {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.pie-container {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 16px 18px 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+
+.pie-container h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.pie-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb; /* línea divisoria corporativa */
+}
+
+/* Tooltip limpio */
+.recharts-tooltip-wrapper {
+  font-size: 0.85rem;
+  font-weight: 500;
+  background-color: rgba(255,255,255,0.95) !important;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Ejes y ticks de los gráficos */
+.recharts-cartesian-axis-tick-value {
+  font-size: 0.8rem;
+  fill: #555;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .pie-charts {
+    flex-direction: column;
+    gap: 25px;
+  }
+  .pie-container {
+    flex: 1 1 100%;
+  }
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-buttons {
+    justify-content: flex-start;
+  }
+  .pie-charts {
+    flex-direction: column;
+  }
+}

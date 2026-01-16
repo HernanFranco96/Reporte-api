@@ -1,0 +1,95 @@
+.history-page {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.history-page h2 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 20px;
+}
+
+.order-info p {
+  font-size: 0.95rem;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+hr {
+  margin: 20px 0;
+  border: 0;
+  height: 1px;
+  background: #e5e7eb;
+}
+
+.visits {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.visit-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  background: #f9fafb;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.visit-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.visit-card h4 {
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  color: #1f2937;
+}
+
+.visit-details p {
+  font-size: 0.9rem;
+  color: #4b5563;
+  margin-bottom: 4px;
+}
+
+.observation {
+  white-space: pre-wrap;
+  padding: 6px 10px;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+}
+
+.back-btn {
+  margin-top: 20px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.back-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.3);
+}
+
+.back-btn:active {
+  transform: translateY(0);
+}
+
+.loading, .error {
+  text-align: center;
+  font-size: 1rem;
+  color: #6b7280;
+}

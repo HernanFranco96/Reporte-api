@@ -1,0 +1,20 @@
+
+
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "hfranco@xg.ar",
+  "password": "123456"
+}
+
+### 👤 CREAR USUARIO (solo admin)
+POST http://192.168.131.141:3000/api/users
+Content-Type: application/json
+
+{
+  "name": "Ingeniería",
+  "email": "ngn@xg.ar",
+  "password": "ngn55@xg",
+  "role": "user"
+}

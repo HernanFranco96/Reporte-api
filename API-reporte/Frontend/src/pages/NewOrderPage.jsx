@@ -1,16 +1,12 @@
-import OrderForm from "../components/OrderForm";
 import { useNavigate } from "react-router-dom";
+import OrderForm from "../components/OrderForm";
 
 export default function NewOrderPage() {
   const navigate = useNavigate();
 
-  const handleCreated = () => {
-    navigate("/api/orders/save");
+  const handleSuccess = () => {
+    navigate("/", { state: { refresh: true } });
   };
 
-  return (
-    <>
-      <OrderForm onCreated={handleCreated} />
-    </>
-  );
+  return <OrderForm onSuccess={handleSuccess} />;
 }

@@ -1,12 +1,12 @@
 // Dashboard.jsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
-import { API_URL } from "../config";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import api from "../api/axios";
 import "./Dashboard.css";
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#f38830", "#A28CFE", "#FF6B6B"];
@@ -30,13 +30,15 @@ export default function Dashboard() {
   const [agentData, setAgentData] = useState([]);
   const [statusData, setStatusData] = useState([]);
   const [typeData, setTypeData] = useState([]);
-  const [avgResolutionTech, setAvgResolutionTech] = useState([]);
-  const [avgResolutionAgent, setAvgResolutionAgent] = useState([]);
+  const [avgWeeklyVisits, setAvgWeeklyVisits] = useState([]);
 
   const [prevAgentData, setPrevAgentData] = useState([]);
   const [prevTechData, setPrevTechData] = useState([]);
 
   const [ordersRaw, setOrdersRaw] = useState([]);
+
+  const location = useLocation();
+  const navigate = useNavigate();
 
   /** TOTAL SEMANA ACTUAL **/
   const totalTechVisits = techData.reduce(
@@ -67,7 +69,7 @@ export default function Dashboard() {
     };
 
     // Técnicos con más visitas cerradas
-    axios.get(`http://${API_URL}:3000/api/stats/technicians`, { params })
+    api.get("/stats/technicians", { params })
       .then(res => setTechData(res.data.map(t => ({
         name: t._id || "Desconocido",
         cerradas: t.cerradas || 0,
@@ -77,46 +79,39 @@ export default function Dashboard() {
       .catch(console.error);
 
     // Agentes con más órdenes cerradas
-    axios.get(`http://${API_URL}:3000/api/stats/agents`, { params })
+    api.get(`/stats/agents`, { params })
       .then(res => setAgentData(res.data.map(a => ({ name: a._id, closed: a.closedOrders }))))
       .catch(console.error);
 
     // Órdenes abiertas / cerradas
-    axios.get(`http://${API_URL}:3000/api/stats/orders/status`, { params })
+    api.get(`/stats/orders/status`, { params })
       .then(res => setStatusData(res.data.map(s => ({ name: s._id || "Desconocido", value: s.count }))))
       .catch(console.error);
 
     // Tipos de visitas
-    axios.get(`http://${API_URL}:3000/api/stats/visits/types`, { params })
+    api.get(`/stats/visits/types`, { params })
       .then(res => setTypeData(res.data.map(t => ({ name: t._id || "Desconocido", value: t.count }))))
       .catch(console.error);
 
-    // Promedio de resolución por técnico
-    axios.get(`http://${API_URL}:3000/api/stats/resolution/getAvgResolutionByTechnician`, { params })
-      .then(res => {
-        const mapped = res.data.map(r => {
-          const avg = Number(r.avgHours);
-          if (isNaN(avg)) console.warn("avgHours NaN detectado para técnico:", r);
-          return {
+    // Promedio de visitas semanales
+    api.get(`/stats/resolution/getAvgWeeklyVisitsByTechnician`, { params })
+      .then(res =>
+        setAvgWeeklyVisits(
+          res.data.map(r => ({
             name: r._id || "Desconocido",
-            avgHours: isNaN(avg) ? 0 : avg
-          };
-        });
-        //console.log("Datos mapeados para avgResolutionTech:", mapped); // <-- ver data final
-        setAvgResolutionTech(mapped);
-      })
-      .catch(err => {
-        console.error("Error al obtener avgResolutionTech:", err);
-      });
+            avg: r.avgWeeklyVisits
+          }))
+        )
+      )
+      .catch(console.error);
 
     const prev = getPreviousWeekRange();
 
-    axios.get(`http://${API_URL}:3000/api/stats/technicians`, { params: prev })
+    api.get(`/stats/technicians`, { params: prev })
       .then(res => setPrevTechData(res.data))
       .catch(console.error);
 
-    axios
-      .get(`http://${API_URL}:3000/api/stats/agents`, { params: prev })
+    api.get(`/stats/agents`, { params: prev })
       .then(res => {
         setPrevAgentData(
           res.data.map(a => ({ closedOrders: a.closedOrders || 0 }))
@@ -124,7 +119,7 @@ export default function Dashboard() {
       })
       .catch(console.error);
 
-    axios.get(`http://${API_URL}:3000/api/orders`, { params })
+    api.get(`/orders`, { params })
       .then(res => setOrdersRaw(res.data))
       .catch(console.error);
   };
@@ -600,6 +595,14 @@ const exportPDF = async () => {
   };
 
   useEffect(() => {
+    if (location.state?.refresh) {
+      fetchData(from, to);
+
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
+
+  useEffect(() => {
     const updateWeek = () => {
       const { from, to } = getCurrentWeekRangeFrontend();
       setFrom(from);
@@ -791,16 +794,17 @@ const exportPDF = async () => {
           </div>
         </div>
 
-        <h2>Tiempo promedio de resolución por técnico (horas)</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={avgResolutionTech} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" angle={-45} textAnchor="end" interval={0} height={60} />
-              <YAxis tickFormatter={(value) => `${value.toFixed(1)} h`} />
-              <Tooltip formatter={(value) => isNaN(value) ? "0 h" : `${value.toFixed(1)} h`} />
-              <Bar dataKey="avgHours" fill="#7ff152" radius={[5,5,0,0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
+        <h2>Promedio de visitas semanales por técnico</h2>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={avgWeeklyVisits}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip formatter={v => `${v} visitas/semana`} />
+            <Bar dataKey="avg" fill="#4f46e5" radius={[5,5,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+
 
       </section>
     </div>

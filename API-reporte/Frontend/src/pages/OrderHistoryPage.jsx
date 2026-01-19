@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { API_URL } from "../config";
+import api from "../api/axios";
 import "./OrderHistoryPage.css";
 
 const formatDate = (date) => {
@@ -16,15 +16,23 @@ export default function OrderHistoryPage() {
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch(`http://${API_URL}:3000/api/orders/${id}`)
-      .then((res) => res.json())
-      .then(setOrder)
+    api
+      .get(`/orders/${id}`)
+      .then(res => {
+        setOrder(res.data);
+      })
+      .catch(err => {
+        console.error("Error cargando historial:", err);
+        setError("No se pudo cargar la orden");
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <p className="loading">Cargando historial...</p>;
+  if (error) return <p className="error">{error}</p>;
   if (!order) return <p className="error">Orden no encontrada</p>;
 
   return (
@@ -32,7 +40,7 @@ export default function OrderHistoryPage() {
       <h2>📜 Historial de la Orden</h2>
 
       <div className="order-info">
-        <p><b>Cliente:</b> {order.clientNumber}</p>
+        <p><b>Cliente:</b> {order.clientNumber || "-"}</p>
         <p><b>Reportado a Ufinet:</b> {order.reportedToUfinet ? "Sí" : "No"}</p>
         <p><b>Creada:</b> {formatDate(order.createdAt)}</p>
       </div>
@@ -40,24 +48,30 @@ export default function OrderHistoryPage() {
       <hr />
 
       <div className="visits">
-        {order.visits.map((v, index) => (
-          <div className="visit-card" key={index}>
-            <h4>Visita #{index + 1}</h4>
+        {Array.isArray(order.visits) && order.visits.length > 0 ? (
+          order.visits.map((v, index) => (
+            <div className="visit-card" key={index}>
+              <h4>Visita #{index + 1}</h4>
 
-            <div className="visit-details">
-              <p><b>Estado:</b> {v.status || "-"}</p>
-              <p><b>Tipo:</b> {v.type || "-"}</p>
-              <p><b>Técnico:</b> {v.technician || "-"}</p>
-              <p><b>Cerrado por:</b> {v.closedBy || "-"}</p>
-              <p><b>Reporte / Acción:</b> {v.reportCode || "-"}</p>
-              <p><b>Estado Reporte:</b> {v.reportStatus || "-"}</p>
-              <p><b>Observación:</b></p>
-              <p className="observation">{v.observation || "-"}</p>
-              <p><b>Fecha Visita:</b> {formatDate(v.visitDate)}</p>
-              <p><b>Fecha Cierre:</b> {formatDate(v.closeDate)}</p>
+              <div className="visit-details">
+                <p><b>Estado:</b> {v.status || "-"}</p>
+                <p><b>Tipo:</b> {v.type || "-"}</p>
+                <p><b>Técnico:</b> {v.technician || "-"}</p>
+                <p><b>Cerrado por:</b> {v.closedBy || "-"}</p>
+                <p><b>Reporte / Acción:</b> {v.reportCode || "-"}</p>
+                <p><b>Estado Reporte:</b> {v.reportStatus || "-"}</p>
+
+                <p><b>Observación:</b></p>
+                <p className="observation">{v.observation || "-"}</p>
+
+                <p><b>Fecha Visita:</b> {formatDate(v.visitDate)}</p>
+                <p><b>Fecha Cierre:</b> {formatDate(v.closeDate)}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <p className="empty">No hay visitas registradas</p>
+        )}
       </div>
 
       <button className="back-btn" onClick={() => navigate("/orders")}>

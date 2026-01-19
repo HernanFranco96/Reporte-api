@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import OrderForm from "../components/OrderForm";
-import { API_URL } from "../config";
+import api from "../api/axios";
 
 export default function EditOrderPage() {
   const { id } = useParams();
@@ -11,16 +11,24 @@ export default function EditOrderPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`http://${API_URL}:3000/api/orders/${id}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error("Orden no encontrada");
-        }
-        return res.json();
+    api
+      .get(`/orders/${id}`)
+      .then(res => {
+        setOrder(res.data);
       })
-      .then(setOrder)
-      .catch((err) => {
-        alert(err.message);
+      .catch(err => {
+        console.error("Error cargando orden:", err);
+
+        if (err.response?.status === 404) {
+          alert("Orden no encontrada");
+        } else if (err.response?.status === 401) {
+          alert("Sesión expirada");
+          navigate("/login");
+          return;
+        } else {
+          alert("Error al cargar la orden");
+        }
+
         navigate("/");
       })
       .finally(() => setLoading(false));
@@ -34,7 +42,7 @@ export default function EditOrderPage() {
       mode="edit"
       orderId={order._id}
       initialData={order}
-      onSaved={() => navigate("/")}
+      onSaved={() => navigate("/orders")}
     />
   );
 }

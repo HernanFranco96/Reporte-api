@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import { API_URL } from "../config";
 import "./OrderForm.css";
 
@@ -25,12 +26,19 @@ export default function OrderForm({
 }) {
   const navigate = useNavigate();
   const [form, setForm] = useState(emptyState);
+  const [saving, setSaving] = useState(false);
+  const [initialForm, setInitialForm] = useState(null);
 
-  /* Precargar datos cuando es edición */
+  const hasChanges =
+    mode === "create" ||
+    JSON.stringify(form) !== JSON.stringify(initialForm);
+
+  /* Precargar datos en edición */
   useEffect(() => {
     if (mode === "edit" && initialData?.visits?.length) {
       const lastVisit = initialData.visits.at(-1);
-      setForm({
+
+      const populatedForm = {
         ...emptyState,
         reportedToUfinet: initialData.reportedToUfinet ?? false,
         status: lastVisit.status || "",
@@ -46,7 +54,11 @@ export default function OrderForm({
         closeDate: lastVisit.closeDate
           ? new Date(lastVisit.closeDate).toISOString().slice(0, 16)
           : ""
-      });
+      };
+
+      setForm(populatedForm);
+      setInitialForm(populatedForm);
+
     }
   }, [mode, initialData]);
 
@@ -60,32 +72,53 @@ export default function OrderForm({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!form.observation.trim()) {
       alert("La observación es obligatoria");
       return;
     }
 
-    const url =
-      mode === "edit"
-        ? `http://${API_URL}:3000/api/orders/${orderId}/visit`
-        : `http://${API_URL}:3000/api/orders/save`;
-    const method = mode === "edit" ? "PUT" : "POST";
+    try {
+      setSaving(true);
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form)
-    });
+      const token = localStorage.getItem("token");
 
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.message || "Error al guardar");
-      return;
+      const url =
+        mode === "edit"
+          ? `http://${API_URL}:3000/api/orders/${orderId}/visit`
+          : `http://${API_URL}:3000/api/orders/save`;
+
+      const method = mode === "edit" ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(form)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Error al guardar");
+      }
+
+      setForm(emptyState);
+
+      toast.success(
+        mode === "edit"
+          ? "Visita agregada correctamente"
+          : "Orden creada correctamente"
+      );
+
+      onSuccess?.(data); // el padre decide a dónde ir
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
     }
-
-    setForm(emptyState);
-    onSuccess?.();
-    navigate("/");
   };
 
   return (
@@ -93,7 +126,6 @@ export default function OrderForm({
       <h3>{mode === "edit" ? "Editar Orden" : "Nueva Orden"}</h3>
 
       <div className="form-grid">
-        {/* Cliente */}
         {mode === "create" && (
           <input
             name="clientNumber"
@@ -104,7 +136,6 @@ export default function OrderForm({
           />
         )}
 
-        {/* Tipo */}
         <select name="type" value={form.type} onChange={handleChange} required>
           <option value="">Tipo</option>
           <option value="Instalación">Instalación</option>
@@ -113,7 +144,6 @@ export default function OrderForm({
           <option value="Retiro equipos">Retiro equipos</option>
         </select>
 
-        {/* Estado Orden */}
         <select name="status" value={form.status} onChange={handleChange} required>
           <option value="">Estado Orden</option>
           <option value="Cerrada">Cerrada</option>
@@ -121,14 +151,17 @@ export default function OrderForm({
           <option value="Cancelada">Cancelada</option>
         </select>
 
-        {/* Técnico */}
-        <select name="technician" value={form.technician} onChange={handleChange} required>
+        <select
+          name="technician"
+          value={form.technician}
+          onChange={handleChange}
+          required
+        >
           <option value="">Técnico</option>
           <option value="Gionet">Gionet</option>
           <option value="Gustavo">Gustavo</option>
         </select>
 
-        {/* Observación */}
         <textarea
           className="full-width"
           name="observation"
@@ -139,18 +172,16 @@ export default function OrderForm({
           onChange={handleChange}
         />
 
-        {/* Cerrado por */}
         <select name="closedBy" value={form.closedBy} onChange={handleChange}>
-          <option value="">Cerrado por</option>
-          <option value="Juan Cruz Castro">Juan Cruz Castro</option>
-          <option value="Fernando Bargas">Fernando Bargas</option>
-          <option value="Pablo Correa">Pablo Correa</option>
-          <option value="Fiona Colonna">Fiona Colonna</option>
-          <option value="Flavio Romero">Flavio Romero</option>
+          <option value="">Seleccione Agente</option>
+          <option value="Juan Cruz Castro">Juan Cruz Castro</option> 
+          <option value="Fernando Bargas">Fernando Bargas</option> 
+          <option value="Pablo Correa">Pablo Correa</option> 
+          <option value="Fiona Colonna">Fiona Colonna</option> 
+          <option value="Flavio Romero">Flavio Romero</option> 
           <option value="Administrador">Administrador</option>
         </select>
 
-        {/* Reportado a Ufinet */}
         <label className="checkbox">
           <input
             type="checkbox"
@@ -161,28 +192,34 @@ export default function OrderForm({
           Reportado a Ufinet
         </label>
 
-        {/* Mostrar Reporte / Acción solo si tildado o ya tiene valor */}
         {(form.reportedToUfinet || form.reportCode) && (
-          <select name="reportCode" value={form.reportCode} onChange={handleChange}>
+          <select
+            name="reportCode"
+            value={form.reportCode}
+            onChange={handleChange}
+          >
             <option value="">Reporte / Acción</option>
-            <option value="Puerto sin potencia">Puerto sin potencia</option>
-            <option value="Error al confirmar ONT">Error al confirmar ONT</option>
-            <option value="Puerto dañado">Puerto dañado</option>
-            <option value="Cambio de CTO">Cambio de CTO</option>
+            <option value="Puerto sin potencia">Puerto sin potencia</option> 
+            <option value="Error al confirmar ONT">Error al confirmar ONT</option> 
+            <option value="Puerto dañado">Puerto dañado</option> 
+            <option value="Cambio de CTO">Cambio de CTO</option> 
             <option value="CTO dañado">CTO dañado</option>
           </select>
         )}
 
         {form.reportedToUfinet && (
-          <select name="reportStatus" value={form.reportStatus} onChange={handleChange} required>
-            <option value="">Estado Reporte / Acción</option>
-            <option value="Sin reporte">Sin reporte</option>
+          <select
+            name="reportStatus"
+            value={form.reportStatus}
+            onChange={handleChange}
+            required
+          >
+            <option value="">Estado Reporte</option>
             <option value="En curso">En curso</option>
             <option value="Listo">Listo</option>
           </select>
         )}
 
-        {/* Fecha Visita */}
         <label>
           Fecha Visita
           <input
@@ -193,7 +230,6 @@ export default function OrderForm({
           />
         </label>
 
-        {/* Fecha Cierre */}
         <label>
           Fecha Cierre
           <input
@@ -205,16 +241,20 @@ export default function OrderForm({
         </label>
       </div>
 
-      {/* Botones */}
       <div className="form-buttons">
-        <button className="submit-btn" type="submit">
-          {mode === "edit" ? "Agregar Visita" : "Guardar Orden"}
-        </button>
         <button
-          type="button"
-          className="back-btn"
-          onClick={() => navigate("/")}
+          className="submit-btn"
+          type="submit"
+          disabled={saving || !hasChanges}
         >
+          {saving
+            ? "Guardando..."
+            : mode === "edit"
+            ? "Agregar Visita"
+            : "Guardar Orden"}
+        </button>
+
+        <button type="button" className="back-btn" onClick={() => navigate("/orders")}>
           ⬅ Volver
         </button>
       </div>

@@ -28,7 +28,7 @@
 ================================ */
 .orders-table-wrapper {
   width: 100%;
-  max-width: 95vw;
+  max-width: 1300px;
   margin: 0 auto;
   padding: 16px;
   font-family: "Inter", system-ui, sans-serif;
@@ -83,9 +83,18 @@
 /* ================================
    TABLA
 ================================ */
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+
 .orders-table {
   width: 100%;
-  min-width: 1100px;
+  min-width: 1200px;
   border-collapse: separate;
   border-spacing: 0;
   background: var(--bg-card);

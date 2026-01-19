@@ -166,75 +166,95 @@ export const getVisitTypes = async (req, res) => {
 };
 
 
-export const getAvgResolutionByTechnician = async (req, res) => {
+export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
   const { from, to } = req.query;
 
-  const match = {};
-  if (from || to) match.createdAt = {};
-  if (from) match.createdAt.$gte = new Date(from);
-  if (to) match.createdAt.$lte = new Date(to);
-
   try {
-    const match = {
-      "visits.visitDate": { $gte: new Date(from), $lte: new Date(to) }
-    };
-
     const result = await Order.aggregate([
-      { $match: match },
+      // Desarmar visitas
+      { $unwind: "$visits" },
 
+      // Filtrar por rango
       {
-        $project: {
-          visits: {
-            $filter: {
-              input: "$visits",
-              as: "v",
-              cond: { $eq: ["$$v.status", "Cerrada"] }
+        $match: {
+          "visits.visitDate": {
+            $gte: new Date(from),
+            $lte: new Date(to)
+          }
+        }
+      },
+
+      // Normalizar fecha (día)
+      {
+        $addFields: {
+          visitDay: {
+            $dateTrunc: {
+              date: "$visits.visitDate",
+              unit: "day"
             }
           }
         }
       },
 
-      { $match: { "visits.0": { $exists: true } } },
-
+      // Obtener semana ISO
       {
         $addFields: {
-          firstVisit: { $arrayElemAt: ["$visits", 0] },
-          lastVisit: { $arrayElemAt: ["$visits", -1] }
+          week: { $isoWeek: "$visitDay" },
+          year: { $isoWeekYear: "$visitDay" }
         }
       },
 
+      // DEDUPLICACIÓN diaria
+      // 1 técnico + 1 orden + 1 día = 1 visita
       {
-        $addFields: {
-          technician: "$firstVisit.technician",
-          resolutionMs: {
-            $subtract: [
-              "$lastVisit.closeDate",
-              "$firstVisit.visitDate"
-            ]
+        $group: {
+          _id: {
+            technician: "$visits.technician",
+            orderId: "$_id",
+            visitDay: "$visitDay",
+            year: "$year",
+            week: "$week"
           }
         }
       },
 
+      // Contar visitas únicas por semana
       {
         $group: {
-          _id: "$technician",
-          avgResolutionMs: { $avg: "$resolutionMs" },
-          ordersCount: { $sum: 1 }
+          _id: {
+            technician: "$_id.technician",
+            year: "$_id.year",
+            week: "$_id.week"
+          },
+          visitsInWeek: { $sum: 1 }
         }
       },
 
+      // Promedio semanal por técnico
+      {
+        $group: {
+          _id: "$_id.technician",
+          avgWeeklyVisits: { $avg: "$visitsInWeek" },
+          weeksCounted: { $sum: 1 }
+        }
+      },
+
+      // Formato final
       {
         $project: {
-          avgHours: { $divide: ["$avgResolutionMs", 1000 * 60 * 60] },
-          ordersCount: 1
+          _id: 1,
+          avgWeeklyVisits: { $round: ["$avgWeeklyVisits", 2] },
+          weeksCounted: 1
         }
       },
 
-      { $sort: { avgHours: 1 } }
+      { $sort: { avgWeeklyVisits: -1 } }
     ]);
+
     res.json(result);
   } catch (err) {
-    console.error("Error promedio por técnico:", err);
+    console.error("Error promedio semanal por técnico:", err);
     res.status(500).json({ message: err.message });
   }
 };
+

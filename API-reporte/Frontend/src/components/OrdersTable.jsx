@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
 import "./OrdersTable.css";
 
 const formatDate = (date) => {
@@ -11,6 +12,7 @@ const formatDate = (date) => {
 
 export default function OrdersTable({ orders }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [sortOrder, setSortOrder] = useState("desc");
   const [clientSearch, setClientSearch] = useState("");
@@ -22,6 +24,7 @@ export default function OrdersTable({ orders }) {
     technician: "",
     closedBy: "",
     reportCode: "",
+    reportStatus: "", 
     visitDate: "",
     closeDate: "",
     createdAt: ""
@@ -40,6 +43,8 @@ export default function OrdersTable({ orders }) {
       status: "",
       technician: "",
       closedBy: "",
+      reportCode: "",
+      reportStatus: "",
       visitDate: "",
       closeDate: "",
       createdAt: ""
@@ -75,6 +80,10 @@ export default function OrdersTable({ orders }) {
       const matchesReportStatus = filters.reportStatus
         ? lastVisit.reportStatus === filters.reportStatus
         : true;
+      const matchesReportCode = filters.reportCode
+        ? lastVisit.reportCode === filters.reportCode
+        : true;
+
 
       return (
         matchesClient &&
@@ -85,6 +94,7 @@ export default function OrdersTable({ orders }) {
         matchesVisitDate &&
         matchesCloseDate &&
         matchesCreated &&
+        matchesReportCode &&
         matchesReportStatus
       );
     });
@@ -152,136 +162,145 @@ export default function OrdersTable({ orders }) {
         </button>
       </div>
 
-      <table className="orders-table">
-        <thead>
-          <tr>
-            <th>Cliente</th>
+      <div className="table-scroll">
+        <table className="orders-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
 
-            <th onClick={() => setOpenFilter(openFilter === "type" ? null : "type")}>
-              Tipo ▼
-              {openFilter === "type" && (
-                <div className="filter-dropdown">
-                  {typeOptions.map((t) => (
-                    <div key={t} onClick={() => handleFilterChange("type", t)}>{t}</div>
-                  ))}
-                </div>
-              )}
-            </th>
-
-            <th onClick={() => setOpenFilter(openFilter === "status" ? null : "status")}>
-              Estado ▼
-              {openFilter === "status" && (
-                <div className="filter-dropdown">
-                  {statusOptions.map((s) => (
-                    <div key={s} onClick={() => handleFilterChange("status", s)}>{s}</div>
-                  ))}
-                </div>
-              )}
-            </th>
-
-            <th onClick={() => setOpenFilter(openFilter === "technician" ? null : "technician")}>
-              Técnico ▼
-              {openFilter === "technician" && (
-                <div className="filter-dropdown">
-                  {technicianOptions.map((t) => (
-                    <div key={t} onClick={() => handleFilterChange("technician", t)}>{t}</div>
-                  ))}
-                </div>
-              )}
-            </th>
-
-            <th onClick={() => setOpenFilter(openFilter === "closedBy" ? null : "closedBy")}>
-              Cerrado por ▼
-              {openFilter === "closedBy" && (
-                <div className="filter-dropdown">
-                  {closedByOptions.map((c) => (
-                    <div key={c} onClick={() => handleFilterChange("closedBy", c)}>{c}</div>
-                  ))}
-                </div>
-              )}
-            </th>
-
-            <th>Observación</th>
-            <th>Reportado a Ufinet</th>
-
-            <th onClick={() => setOpenFilter(openFilter === "reportCode" ? null : "reportCode")}>
-              Reporte / Acción ▼
-              {openFilter === "reportCode" && (
-                <div className="filter-dropdown">
-                  {reportCodeOptions.map((r) => (
-                    <div key={r} onClick={() => handleFilterChange("reportCode", r)}>
-                      {r}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </th>
-
-            <th
-                onClick={() =>
-                  setOpenFilter(openFilter === "reportStatus" ? null : "reportStatus")
-                }
-              >
-                Estado Reporte / Acción ▼
-                {openFilter === "reportStatus" && (
+              <th onClick={() => setOpenFilter(openFilter === "type" ? null : "type")}>
+                Tipo ▼
+                {openFilter === "type" && (
                   <div className="filter-dropdown">
-                    {reportStatusOptions.map((s) => (
-                      <div
-                        key={s}
-                        onClick={() => handleFilterChange("reportStatus", s)}
-                      >
-                        {s}
+                    {typeOptions.map((t) => (
+                      <div key={t} onClick={() => handleFilterChange("type", t)}>{t}</div>
+                    ))}
+                  </div>
+                )}
+              </th>
+
+              <th onClick={() => setOpenFilter(openFilter === "status" ? null : "status")}>
+                Estado ▼
+                {openFilter === "status" && (
+                  <div className="filter-dropdown">
+                    {statusOptions.map((s) => (
+                      <div key={s} onClick={() => handleFilterChange("status", s)}>{s}</div>
+                    ))}
+                  </div>
+                )}
+              </th>
+
+              <th onClick={() => setOpenFilter(openFilter === "technician" ? null : "technician")}>
+                Técnico ▼
+                {openFilter === "technician" && (
+                  <div className="filter-dropdown">
+                    {technicianOptions.map((t) => (
+                      <div key={t} onClick={() => handleFilterChange("technician", t)}>{t}</div>
+                    ))}
+                  </div>
+                )}
+              </th>
+
+              <th onClick={() => setOpenFilter(openFilter === "closedBy" ? null : "closedBy")}>
+                Cerrado por ▼
+                {openFilter === "closedBy" && (
+                  <div className="filter-dropdown">
+                    {closedByOptions.map((c) => (
+                      <div key={c} onClick={() => handleFilterChange("closedBy", c)}>{c}</div>
+                    ))}
+                  </div>
+                )}
+              </th>
+
+              <th>Observación</th>
+              <th>Reportado a Ufinet</th>
+
+              <th onClick={() => setOpenFilter(openFilter === "reportCode" ? null : "reportCode")}>
+                Reporte / Acción ▼
+                {openFilter === "reportCode" && (
+                  <div className="filter-dropdown">
+                    {reportCodeOptions.map((r) => (
+                      <div key={r} onClick={() => handleFilterChange("reportCode", r)}>
+                        {r}
                       </div>
                     ))}
                   </div>
                 )}
               </th>
 
-            <th>
-              Fecha Visita
-              <input type="date" value={filters.visitDate} onChange={(e) => handleFilterChange("visitDate", e.target.value)} />
-            </th>
+              <th
+                  onClick={() =>
+                    setOpenFilter(openFilter === "reportStatus" ? null : "reportStatus")
+                  }
+                >
+                  Estado Reporte / Acción ▼
+                  {openFilter === "reportStatus" && (
+                    <div className="filter-dropdown">
+                      {reportStatusOptions.map((s) => (
+                        <div
+                          key={s}
+                          onClick={() => handleFilterChange("reportStatus", s)}
+                        >
+                          {s}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </th>
 
-            <th>
-              Fecha Cierre
-              <input type="date" value={filters.closeDate} onChange={(e) => handleFilterChange("closeDate", e.target.value)} />
-            </th>
+              <th>
+                Fecha Visita
+                <input type="date" value={filters.visitDate} onChange={(e) => handleFilterChange("visitDate", e.target.value)} />
+              </th>
 
-            <th onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>
-              Creado {sortOrder === "asc" ? "▲" : "▼"}
-            </th>
+              <th>
+                Fecha Cierre
+                <input type="date" value={filters.closeDate} onChange={(e) => handleFilterChange("closeDate", e.target.value)} />
+              </th>
 
-            <th>Acciones</th>
-          </tr>
-        </thead>
+              <th onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}>
+                Creado {sortOrder === "asc" ? "▲" : "▼"}
+              </th>
 
-        <tbody>
-          {currentOrders.map((o) => {
-            const lastVisit = o.visits?.at(-1);
-            const status = lastVisit?.status || "";
-            return (
-              <tr key={o._id} data-status={status}>
-                <td>{o.clientNumber}</td>
-                <td>{status || "-"}</td>
-                <td>{lastVisit?.type || "-"}</td>
-                <td>{lastVisit?.technician || "-"}</td>
-                <td>{lastVisit?.closedBy || "-"}</td>
-                <td>{lastVisit?.observation || "-"}</td>
-                <td>{o.reportedToUfinet ? "Sí" : "No"}</td>
-                <td>{lastVisit?.reportCode || "-"}</td>
-                <td>{lastVisit?.reportStatus || "-"}</td>
-                <td>{formatDate(lastVisit?.visitDate)}</td>
-                <td>{formatDate(lastVisit?.closeDate)}</td>
-                <td>{formatDate(o.createdAt)}</td>
-                <td className="actions">
-                  <button className="edit-btn" onClick={() => navigate(`/orders/${o._id}/edit`)}>✏️ Editar</button>
-                  <button className="history-btn" onClick={() => navigate(`/orders/${o._id}/history`)}>📜 Historial</button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {currentOrders.map((o) => {
+              const lastVisit = o.visits?.at(-1);
+              const status = lastVisit?.status || "";
+              return (
+                <tr key={o._id} data-status={status}>
+                  <td>{o.clientNumber}</td>
+                  <td>{status || "-"}</td>
+                  <td>{lastVisit?.type || "-"}</td>
+                  <td>{lastVisit?.technician || "-"}</td>
+                  <td>{lastVisit?.closedBy || "-"}</td>
+                  <td>{lastVisit?.observation || "-"}</td>
+                  <td>{o.reportedToUfinet ? "Sí" : "No"}</td>
+                  <td>{lastVisit?.reportCode || "-"}</td>
+                  <td>{lastVisit?.reportStatus || "-"}</td>
+                  <td>{formatDate(lastVisit?.visitDate)}</td>
+                  <td>{formatDate(lastVisit?.closeDate)}</td>
+                  <td>{formatDate(o.createdAt)}</td>
+                  <td className="actions">
+                    {user?.role === "admin" && (
+                      <button
+                        className="edit-btn"
+                        onClick={() => navigate(`/orders/${o._id}/edit`)}
+                      >
+                        ✏️ Editar
+                      </button>
+                    )}
+                    <button className="history-btn" onClick={() => navigate(`/orders/${o._id}/history`)}>📜 Historial</button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {/* PAGINACIÓN */}
       {totalPages > 1 && (

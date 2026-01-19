@@ -52,3 +52,17 @@
   background: #2563eb;
   border-radius: 2px;
 }
+
+.logout {
+  all: unset;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  padding: 6px 2px;
+  position: relative;
+}
+
+.logout:hover {
+  color: #ef4444;
+}
+

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+  BarChart, Bar, PieChart, Pie, Line, LineChart, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -28,9 +28,11 @@ export default function Dashboard() {
 
   const [techData, setTechData] = useState([]);
   const [agentData, setAgentData] = useState([]);
+  const [closedByZoneData, setClosedByZoneData] = useState([]);
   const [statusData, setStatusData] = useState([]);
   const [typeData, setTypeData] = useState([]);
-  const [avgWeeklyVisits, setAvgWeeklyVisits] = useState([]);
+  const [techEffectiveness, setTechEffectiveness] = useState([]);
+  const [dailyClosedData, setDailyClosedData] = useState([]);
 
   const [prevAgentData, setPrevAgentData] = useState([]);
   const [prevTechData, setPrevTechData] = useState([]);
@@ -83,6 +85,20 @@ export default function Dashboard() {
       .then(res => setAgentData(res.data.map(a => ({ name: a._id, closed: a.closedOrders }))))
       .catch(console.error);
 
+    // Ordenes cerradas por dia
+    api.get("/stats/closed-by-day", { params })
+      .then(res => {
+        setDailyClosedData(res.data.map(d => ({ date: d.date, count: d.count })));
+      })
+      .catch(console.error);
+
+    // Órdenes cerradas por zona
+    api.get(`/stats/orders/closed-by-zone`, { params })
+      .then(res => setClosedByZoneData(
+        res.data.map(z => ({ name: z._id, value: z.count }))
+      ))
+      .catch(console.error);
+
     // Órdenes abiertas / cerradas
     api.get(`/stats/orders/status`, { params })
       .then(res => setStatusData(res.data.map(s => ({ name: s._id || "Desconocido", value: s.count }))))
@@ -93,17 +109,22 @@ export default function Dashboard() {
       .then(res => setTypeData(res.data.map(t => ({ name: t._id || "Desconocido", value: t.count }))))
       .catch(console.error);
 
-    // Promedio de visitas semanales
-    api.get(`/stats/resolution/getAvgWeeklyVisitsByTechnician`, { params })
+    // Promedio de efectividad
+    api.get(`/stats/resolution/technician-effectiveness`, { params })
       .then(res =>
-        setAvgWeeklyVisits(
-          res.data.map(r => ({
-            name: r._id || "Desconocido",
-            avg: r.avgWeeklyVisits
+        setTechEffectiveness(
+           res.data.map(t => ({
+            name: t._id || "Desconocido",
+            total: t.totalOrders,
+            problems: t.ordersWithProblem,
+            ok: t.totalOrders - t.ordersWithProblem,
+            effectiveness: t.effectiveness
           }))
         )
       )
       .catch(console.error);
+
+
 
     const prev = getPreviousWeekRange();
 
@@ -119,7 +140,7 @@ export default function Dashboard() {
       })
       .catch(console.error);
 
-    api.get(`/orders`, { params })
+    api.get(`/stats/reportWeek`, { params })
       .then(res => setOrdersRaw(res.data))
       .catch(console.error);
   };
@@ -223,6 +244,25 @@ export default function Dashboard() {
   const formatDate = d =>
   d ? new Date(d).toISOString().slice(0, 10) : "-";
 
+  const getLastVisit = (order) => {
+    if (!order.visits || order.visits.length === 0) return null;
+    return order.visits[order.visits.length - 1];
+  };
+
+  const isCloseInRange = (visit, from, to) => {
+    if (!visit?.closeDate) return false;
+
+    const d = new Date(visit.closeDate);
+
+    const fromDate = new Date(from);
+    fromDate.setHours(0, 0, 0, 0);
+
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+
+    return d >= fromDate && d <= toDate;
+  };
+
   const buildRowsByVisits = (orders, filterFn) => {
 
     return orders
@@ -245,6 +285,33 @@ export default function Dashboard() {
           obs: matchingVisits.map((v, i) => `(${i + 1}) ${v.observation}`).join("\n"),
           visit: matchingVisits.map(v => formatDate(v.visitDate)).join("\n"),
           close: matchingVisits.map(v => formatDate(v.closeDate)).join("\n")
+        };
+      })
+      .filter(Boolean);
+  };
+
+  const buildRowsByClosedOrders = (orders, agentName) => {
+    return orders
+      .map(order => {
+        const lastVisit = getLastVisit(order);
+
+        if (!lastVisit) return null;
+
+        // Tiene que estar cerrada
+        if (!/^cerrada$/i.test(lastVisit.status)) return null;
+
+        // Tiene que cerrar en rango
+        if (!isCloseInRange(lastVisit, from, to)) return null;
+
+        // Tiene que cerrar este agente
+        if (lastVisit.closedBy !== agentName) return null;
+
+        return {
+          client: order.clientNumber,
+          status: lastVisit.status,
+          obs: lastVisit.observation || "-",
+          visit: formatDate(lastVisit.visitDate),
+          close: formatDate(lastVisit.closeDate)
         };
       })
       .filter(Boolean);
@@ -391,9 +458,9 @@ const exportPDF = async () => {
     }
 
     agentData.forEach((agent, index) => {
-      const rows = buildRowsByVisits(
+      const rows = buildRowsByClosedOrders(
         ordersRaw,
-        v => v.closedBy === agent.name
+        agent.name
       );
 
       if (rows.length > 0) {
@@ -465,6 +532,43 @@ const exportPDF = async () => {
       }
     }
 
+    // ==================================
+    // GRÁFICO: ÓRDENES CERRADAS POR ZONA
+    // ==================================
+    y = checkPageBreak(pdf, y, 140);
+    const zoneChartEl = document.getElementById("zone-chart");
+    if (zoneChartEl) {
+      pdf.setFontSize(16);
+      pdf.setFont(undefined, "bold");
+      pdf.text("Órdenes cerradas por zona", 10, y);
+      y += 6;
+
+      const canvas = await html2canvas(zoneChartEl, {
+        scale: 1.6,
+        backgroundColor: "#ffffff",
+        useCORS: true
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.85);
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, "JPEG", 0, y, pdfWidth, imgHeight);
+      y += imgHeight + 6;
+
+      const totalClosed = closedByZoneData.reduce((a,b)=>a+b.value,0);
+      pdf.setFontSize(11);
+      pdf.setFont(undefined, "normal");
+      pdf.text(`Total órdenes cerradas: ${totalClosed}`, 12, y);
+      y += 5;
+
+      closedByZoneData.forEach(z => {
+        pdf.text(`• ${z.name}: ${z.value}`, 14, y);
+        y += 4;
+      });
+
+      y += 10;
+    }
+
     // ======================
     // GRÁFICO: TIPOS DE VISITA
     // ======================
@@ -505,6 +609,47 @@ const exportPDF = async () => {
 
         y += 10;
       }
+    }
+
+    // ======================
+    // GRÁFICO: EFECTIVIDAD DE TÉCNICOS
+    // ======================
+    y = checkPageBreak(pdf, y, 140);
+
+    const effectivenessChart = document.getElementById("tech-effectiveness-chart");
+
+    if (effectivenessChart) {
+      pdf.setFontSize(16);
+      pdf.setFont(undefined, "bold");
+      pdf.text("Efectividad de técnicos (órdenes sin reporte)", 10, y);
+      y += 6;
+
+      const canvas = await html2canvas(effectivenessChart, {
+        scale: 1.6,
+        backgroundColor: "#ffffff",
+        useCORS: true
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.9);
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, "JPEG", 0, y, pdfWidth, imgHeight);
+      y += imgHeight + 6;
+
+      // Resumen numérico debajo del gráfico
+      pdf.setFontSize(11);
+      pdf.setFont(undefined, "normal");
+
+      techEffectiveness.forEach(t => {
+        pdf.text(
+          `• ${t.name}: ${t.ok}/${t.total} sin problemas (${t.effectiveness}%)`,
+          12,
+          y
+        );
+        y += 4;
+      });
+
+      y += 8;
     }
 
     // ======================
@@ -566,7 +711,7 @@ const exportPDF = async () => {
 
   const getCurrentWeekRangeFrontend = () => {
     const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = domingo, 1 = lunes, ... 6 = sábado
+    const dayOfWeek = now.getDay(); 
 
     // Retrocedemos al domingo
     const sunday = new Date(now);
@@ -684,6 +829,19 @@ const exportPDF = async () => {
     );
   };
 
+  const formattedData = (dailyClosedData || []).map(d => ({
+    date: d.date, 
+    count: d.count
+  }));
+
+  const chartHeight = Math.max(techEffectiveness.length * 60, 200);
+
+  const getEffectivenessColor = (value) => {
+    if (value >= 80) return "#22c55e"; // verde
+    if (value >= 50) return "#eab308"; // amarillo
+    return "#ef4444";                 // rojo
+  };
+
   return (
     <div className="dashboard" id="dashboard-content">
       {/* FILTROS */}
@@ -711,7 +869,31 @@ const exportPDF = async () => {
       {/* GRÁFICAS */}
       <section className="charts-section">
 
-        <h2>Técnicos con más visitas (por estado)</h2>
+        <h2>Órdenes cerradas por día</h2>
+        <ResponsiveContainer width="100%" height={300} id="daily-closed-chart">
+           <LineChart width={800} height={300} data={formattedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="date" 
+              tickFormatter={dateStr => {
+                const [year, month, day] = dateStr.split("-");
+                return `${day}/${month}`;
+              }}
+            />
+            <Tooltip 
+              formatter={(value, name, props) => value} 
+              labelFormatter={dateStr => {
+                const [year, month, day] = dateStr.split("-");
+                return `${day}/${month}/${year}`;
+              }}
+            />
+            <YAxis allowDecimals={false} />
+            <Tooltip />
+            <Line type="monotone" dataKey="count" stroke="#8884d8" strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
+
+        <h2>Visitas realizadas por los técnicos</h2>
         <ResponsiveContainer width="100%" height={300} id="tech-chart">
           <BarChart data={techData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -724,7 +906,7 @@ const exportPDF = async () => {
           </BarChart>
         </ResponsiveContainer>
 
-        <h2>Agentes con más órdenes cerradas</h2>
+        <h2>Órdenes cerradas por agentes</h2>
         <ResponsiveContainer width="100%" height={300} id="agent-chart">
           <BarChart data={agentData}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -769,6 +951,30 @@ const exportPDF = async () => {
           </div>
 
           <div className="pie-container">
+            <h2>Órdenes cerradas por zona</h2>
+            <div id="zone-chart" className="pie-chart-wrapper">
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={closedByZoneData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label={createPieLabel(closedByZoneData.reduce((a,b)=>a+b.value,0))}
+                  >
+                    {closedByZoneData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="pie-container">
             <h2>Tipos de visitas</h2>
             <ResponsiveContainer width="100%" height={260} id="type-chart">
               <PieChart>
@@ -794,19 +1000,83 @@ const exportPDF = async () => {
           </div>
         </div>
 
-        <h2>Promedio de visitas semanales por técnico</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={avgWeeklyVisits}>
+        <h2>Efectividad de técnicos (órdenes sin reporte)</h2>
+
+        <div id="tech-effectiveness-chart">
+        <ResponsiveContainer
+          width="100%"
+          height={Math.max(techEffectiveness.length * 55, 220)}
+        >
+          <BarChart
+            data={techEffectiveness}
+            layout="vertical"
+            margin={{ top: 20, right: 40, left: 120, bottom: 20 }}
+            barCategoryGap={12}
+          >
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip formatter={v => `${v} visitas/semana`} />
-            <Bar dataKey="avg" fill="#4f46e5" radius={[5,5,0,0]} />
+            
+            {/* Eje X numérico */}
+            <XAxis type="number" allowDecimals={false} />
+
+            {/* Eje Y con técnicos */}
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={100}
+            />
+
+            {/* Tooltip completo */}
+            <Tooltip
+              content={({ payload }) => {
+                if (!payload || !payload.length) return null;
+                const d = payload[0].payload;
+
+                return (
+                  <div style={{
+                    background: "#fff",
+                    border: "1px solid #ddd",
+                    padding: "8px",
+                    borderRadius: "6px"
+                  }}>
+                    <strong>{d.name}</strong>
+                    <p>Total órdenes: {d.total}</p>
+                    <p>Con problemas: {d.problems}</p>
+                    <p>Sin problemas: {d.ok}</p>
+                    <p>Efectividad: {d.effectiveness}%</p>
+                  </div>
+                );
+              }}
+            />
+
+            {/* TOTAL DE ÓRDENES */}
+            <Bar
+              dataKey="total"
+              name="Total de órdenes"
+              fill="#9ca3af"
+              barSize={16}
+              radius={[0, 6, 6, 0]}
+            />
+
+            {/* ÓRDENES CON PROBLEMAS */}
+            <Bar
+              dataKey="problems"
+              name="Órdenes con problemas"
+              barSize={16}
+              radius={[0, 6, 6, 0]}
+            >
+              {techEffectiveness.map((t, i) => (
+                <Cell
+                  key={i}
+                  fill={getEffectivenessColor(t.effectiveness)}
+                />
+              ))}
+            </Bar>
+
           </BarChart>
         </ResponsiveContainer>
-
-
+        </div>
       </section>
     </div>
   );
 }
+

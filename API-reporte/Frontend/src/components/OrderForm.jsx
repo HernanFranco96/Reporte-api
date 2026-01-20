@@ -15,7 +15,8 @@ const emptyState = {
   reportCode: "",
   observation: "",
   visitDate: "",
-  closeDate: ""
+  closeDate: "",
+  zona: ""
 };
 
 export default function OrderForm({
@@ -53,7 +54,8 @@ export default function OrderForm({
           : "",
         closeDate: lastVisit.closeDate
           ? new Date(lastVisit.closeDate).toISOString().slice(0, 16)
-          : ""
+          : "",
+        zona: lastVisit.zona || ""
       };
 
       setForm(populatedForm);
@@ -142,6 +144,17 @@ export default function OrderForm({
           <option value="Mudanza">Mudanza</option>
           <option value="Service">Service</option>
           <option value="Retiro equipos">Retiro equipos</option>
+        </select>
+
+        <select
+          name="zona"
+          value={form.zona}
+          onChange={handleChange}
+          required
+        >
+          <option value="">Seleccione Zona</option>
+          <option value="Florencio Varela">Florencio Varela</option>
+          <option value="Quilmes">Quilmes</option>
         </select>
 
         <select name="status" value={form.status} onChange={handleChange} required>

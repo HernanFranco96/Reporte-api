@@ -32,6 +32,13 @@ const orderSchema = new mongoose.Schema(
       index: true
     },
 
+    zona: {
+      type: String,
+      enum: ["Florencio Varela", "Quilmes"],
+      required: true,
+      index: true
+    },
+
     reportedToUfinet: {
       type: Boolean,
       default: false

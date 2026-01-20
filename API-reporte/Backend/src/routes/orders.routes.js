@@ -5,7 +5,9 @@ import {
     getOrders, 
     getOrderHistory, 
     saveOrder, 
-    addVisit } from "../controllers/orders.controller.js";
+    addVisit,
+}
+     from "../controllers/orders.controller.js";
 import { authRequired } from "../middlewares/auth.middleware.js";
 
 const router = Router();

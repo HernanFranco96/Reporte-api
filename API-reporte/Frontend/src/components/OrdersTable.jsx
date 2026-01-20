@@ -27,7 +27,8 @@ export default function OrdersTable({ orders }) {
     reportStatus: "", 
     visitDate: "",
     closeDate: "",
-    createdAt: ""
+    createdAt: "",
+    zona: ""
   });
 
   // Dropdown abierto
@@ -47,7 +48,8 @@ export default function OrdersTable({ orders }) {
       reportStatus: "",
       visitDate: "",
       closeDate: "",
-      createdAt: ""
+      createdAt: "",
+      zona: ""
     });
 
     setClientSearch("");
@@ -83,7 +85,9 @@ export default function OrdersTable({ orders }) {
       const matchesReportCode = filters.reportCode
         ? lastVisit.reportCode === filters.reportCode
         : true;
-
+      const matchesZona = filters.zona
+        ? lastVisit.zona?.trim().toLowerCase() === filters.zona.trim().toLowerCase()
+        : true;
 
       return (
         matchesClient &&
@@ -95,7 +99,8 @@ export default function OrdersTable({ orders }) {
         matchesCloseDate &&
         matchesCreated &&
         matchesReportCode &&
-        matchesReportStatus
+        matchesReportStatus &&
+        matchesZona
       );
     });
   }, [orders, filters, clientSearch]);
@@ -157,6 +162,10 @@ export default function OrdersTable({ orders }) {
           className="client-search"
         />
 
+        <div className="orders-total">
+          Total de órdenes: {filteredOrders.length}
+        </div>
+
         <button className="clear-btn" onClick={clearFilters}>
           🧹 Limpiar filtros
         </button>
@@ -207,6 +216,19 @@ export default function OrdersTable({ orders }) {
                   <div className="filter-dropdown">
                     {closedByOptions.map((c) => (
                       <div key={c} onClick={() => handleFilterChange("closedBy", c)}>{c}</div>
+                    ))}
+                  </div>
+                )}
+              </th>
+
+              <th onClick={() => setOpenFilter(openFilter === "zona" ? null : "zona")}>
+                Zona ▼
+                {openFilter === "zona" && (
+                  <div className="filter-dropdown">
+                    {["Florencio Varela", "Quilmes"].map((z) => (
+                      <div key={z} onClick={() => handleFilterChange("zona", z)}>
+                        {z}
+                      </div>
                     ))}
                   </div>
                 )}
@@ -277,8 +299,9 @@ export default function OrdersTable({ orders }) {
                   <td>{lastVisit?.type || "-"}</td>
                   <td>{lastVisit?.technician || "-"}</td>
                   <td>{lastVisit?.closedBy || "-"}</td>
+                  <td>{lastVisit?.zona || "-"}</td>
                   <td>{lastVisit?.observation || "-"}</td>
-                  <td>{o.reportedToUfinet ? "Sí" : "No"}</td>
+                  <td>{lastVisit?.reportedToUfinet ? "Sí" : "No"}</td>
                   <td>{lastVisit?.reportCode || "-"}</td>
                   <td>{lastVisit?.reportStatus || "-"}</td>
                   <td>{formatDate(lastVisit?.visitDate)}</td>

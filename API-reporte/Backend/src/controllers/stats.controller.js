@@ -87,6 +87,53 @@ export const getTopAgents = async (req, res) => {
   }
 };
 
+// Órdenes cerradas por zona en un rango de fechas
+export const getClosedOrdersByZone = async (req, res) => {
+  try {
+    let { from, to } = req.query;
+
+    if (!from || !to) {
+      const range = getCurrentWeekRange();
+      from = range.from.toISOString();
+      to = range.to.toISOString();
+    }
+
+    const data = await Order.aggregate([
+      // Tomamos la última visita
+      { $addFields: { lastVisit: { $arrayElemAt: ["$visits", -1] } } },
+
+      // Filtramos solo órdenes cerradas dentro del rango según fecha de cierre
+      {
+        $match: {
+          "lastVisit.status": { $regex: /^cerrada$/i },
+          "lastVisit.closeDate": { $gte: new Date(from), $lte: new Date(to) }
+        }
+      },
+
+      // Agrupamos por zona (o "Sin zona" si no existe)
+      {
+        $group: {
+          _id: { $ifNull: ["$lastVisit.zona", "Sin zona"] },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Asegurar siempre que las dos zonas aparezcan aunque tengan 0
+    const zones = ["Florencio Varela", "Quilmes"];
+    const result = zones.map(z => {
+      const found = data.find(d => d._id === z);
+      return { _id: z, count: found ? found.count : 0 };
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error getClosedOrdersByZone:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
 // Órdenes abiertas / cerradas en un rango de fechas
 export const getOrderStatusSummary = async (req, res) => {
   let { from, to } = req.query;
@@ -165,7 +212,6 @@ export const getVisitTypes = async (req, res) => {
   }
 };
 
-
 export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
   const { from, to } = req.query;
 
@@ -174,7 +220,7 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
       // Desarmar visitas
       { $unwind: "$visits" },
 
-      // Filtrar por rango
+      // Filtrar visitas dentro del rango
       {
         $match: {
           "visits.visitDate": {
@@ -184,19 +230,14 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
         }
       },
 
-      // Normalizar fecha (día)
+      // Obtener semana ISO
       {
         $addFields: {
           visitDay: {
-            $dateTrunc: {
-              date: "$visits.visitDate",
-              unit: "day"
-            }
+            $dateTrunc: { date: "$visits.visitDate", unit: "day" }
           }
         }
       },
-
-      // Obtener semana ISO
       {
         $addFields: {
           week: { $isoWeek: "$visitDay" },
@@ -204,21 +245,34 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
         }
       },
 
-      // DEDUPLICACIÓN diaria
-      // 1 técnico + 1 orden + 1 día = 1 visita
+      // Agrupar por técnico + orden + semana
       {
         $group: {
           _id: {
             technician: "$visits.technician",
             orderId: "$_id",
-            visitDay: "$visitDay",
             year: "$year",
             week: "$week"
+          },
+          // Si ALGUNA visita tuvo reportCode → problema
+          hasProblem: {
+            $max: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$visits.reportCode", null] },
+                    { $ne: ["$visits.reportCode", ""] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
           }
         }
       },
 
-      // Contar visitas únicas por semana
+      // Contar órdenes por semana
       {
         $group: {
           _id: {
@@ -226,35 +280,57 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
             year: "$_id.year",
             week: "$_id.week"
           },
-          visitsInWeek: { $sum: 1 }
+          totalOrders: { $sum: 1 },
+          ordersWithProblem: { $sum: "$hasProblem" }
         }
       },
 
-      // Promedio semanal por técnico
+      // Consolidar por técnico
       {
         $group: {
           _id: "$_id.technician",
-          avgWeeklyVisits: { $avg: "$visitsInWeek" },
-          weeksCounted: { $sum: 1 }
+          totalOrders: { $sum: "$totalOrders" },
+          ordersWithProblem: { $sum: "$ordersWithProblem" }
         }
       },
 
-      // Formato final
+      // Calcular efectividad
       {
         $project: {
           _id: 1,
-          avgWeeklyVisits: { $round: ["$avgWeeklyVisits", 2] },
-          weeksCounted: 1
+          totalOrders: 1,
+          ordersWithProblem: 1,
+          effectiveness: {
+            $round: [
+              {
+                $multiply: [
+                  {
+                    $cond: [
+                      { $eq: ["$totalOrders", 0] },
+                      0,
+                      {
+                        $divide: [
+                          { $subtract: ["$totalOrders", "$ordersWithProblem"] },
+                          "$totalOrders"
+                        ]
+                      }
+                    ]
+                  },
+                  100
+                ]
+              },
+              2
+            ]
+          }
         }
       },
 
-      { $sort: { avgWeeklyVisits: -1 } }
+      { $sort: { effectiveness: -1 } }
     ]);
 
     res.json(result);
   } catch (err) {
-    console.error("Error promedio semanal por técnico:", err);
+    console.error("Error efectividad semanal por técnico:", err);
     res.status(500).json({ message: err.message });
   }
 };
-

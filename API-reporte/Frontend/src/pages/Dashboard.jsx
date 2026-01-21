@@ -356,6 +356,50 @@ export default function Dashboard() {
     return y + 6;
   };
 
+const toLocalDateOnly = (d) => {
+  const date = new Date(d);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+};
+
+const buildProblemRowsByTechnicianThisWeek = (orders, technicians) => {
+  const rows = orders.flatMap(order => {
+    if (!Array.isArray(order.visits) || order.visits.length === 0) {
+      return [];
+    }
+
+    return order.visits
+      .filter(v => v.reportCode && v.reportCode.trim())
+      .filter(v => technicians.includes(v.technician))
+      .filter(v => {
+        const visitDate = toLocalDateOnly(v.visitDate);
+        const fromLocal = toLocalDateOnly(from);
+        const toLocal = toLocalDateOnly(to);
+        return visitDate >= fromLocal && visitDate <= toLocal;
+      })
+      .map(v => ({
+        technician: v.technician,
+        client: order.clientNumber,
+        status: v.status || "-",
+        obs: `Reporte: ${v.reportCode}\n${v.observation || "-"}`,
+        visit: formatDate(v.visitDate),
+        close: v.closeDate ? formatDate(v.closeDate) : "-"
+      }));
+  });
+
+  // 🔽 AGRUPAR POR TÉCNICO
+  return rows.reduce((acc, row) => {
+    if (!acc[row.technician]) {
+      acc[row.technician] = [];
+    }
+    acc[row.technician].push(row);
+    return acc;
+  }, {});
+};
+
   // Función exportar PDF
 const exportPDF = async () => {
     const pdf = new jsPDF("p", "mm", "a4");
@@ -650,6 +694,38 @@ const exportPDF = async () => {
       });
 
       y += 8;
+
+      // ======================
+      // TABLAS: ÓRDENES CON PROBLEMAS POR TÉCNICO (SEMANA ACTUAL)
+      // ======================
+
+      const TECHNICIANS = ["Gustavo", "Gionet"];
+
+      const groupedRows = buildProblemRowsByTechnicianThisWeek(
+        ordersRaw,
+        TECHNICIANS
+      );
+
+      Object.entries(groupedRows).forEach(([technician, rows]) => {
+        if (rows.length === 0) return;
+
+        const tableHeight = estimateTableHeight(pdf, rows);
+
+        if (y + tableHeight > PAGE_HEIGHT - MARGIN_BOTTOM) {
+          pdf.addPage();
+          y = 10;
+        }
+
+        y = drawTable(
+          pdf,
+          y,
+          `Órdenes con problemas – ${technician}`,
+          rows
+        );
+
+        y = drawDivider(pdf, y);
+      });
+
     }
 
     // ======================

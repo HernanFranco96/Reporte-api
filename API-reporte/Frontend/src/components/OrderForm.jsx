@@ -55,7 +55,7 @@ export default function OrderForm({
         closeDate: lastVisit.closeDate
           ? new Date(lastVisit.closeDate).toISOString().slice(0, 16)
           : "",
-        zona: lastVisit.zona || ""
+        zona: initialData.zona || ""
       };
 
       setForm(populatedForm);

@@ -207,12 +207,12 @@ export const saveOrder = async (req, res) => {
 
     const order = await Order.create({
       clientNumber: req.body.clientNumber,
-      zona,
       reportedToUfinet: req.body.reportedToUfinet,
       visits: [
         {
           ...visitData,
           observation,
+          zona,
           visitDate: visitData.visitDate ? new Date(visitData.visitDate) : undefined,
           closeDate: visitData.closeDate ? new Date(visitData.closeDate) : undefined
         }
@@ -227,7 +227,7 @@ export const saveOrder = async (req, res) => {
 
 export const addVisit = async (req, res) => {
   try {
-    const { observation, ...visitData } = req.body;
+    const { observation, zona, ...visitData } = req.body;
 
     if (!observation?.trim()) {
       return res.status(400).json({ message: "La observación es obligatoria" });
@@ -237,12 +237,13 @@ export const addVisit = async (req, res) => {
       req.params.id,
       {
         $set: {
-          reportedToUfinet: req.body.reportedToUfinet
+          reportedToUfinet: req.body.reportedToUfinet,
         },
         $push: {
           visits: {
             ...visitData,
             observation,
+            zona,
             visitDate: visitData.visitDate ? new Date(visitData.visitDate) : undefined,
             closeDate: visitData.closeDate ? new Date(visitData.closeDate) : undefined
           }

@@ -12,6 +12,11 @@ const visitSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    zona: {
+      type: String,
+      enum: ["Florencio Varela", "Quilmes"],
+      required: true
+    },
     reportCode: String,
     reportStatus: String,
     visitDate: Date,
@@ -28,13 +33,6 @@ const orderSchema = new mongoose.Schema(
   {
     clientNumber: {
       type: String,
-      required: true,
-      index: true
-    },
-
-    zona: {
-      type: String,
-      enum: ["Florencio Varela", "Quilmes"],
       required: true,
       index: true
     },

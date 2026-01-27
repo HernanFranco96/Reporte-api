@@ -6,6 +6,7 @@ import {
     getClosedOrdersByZone,
     getOrderStatusSummary, 
     getVisitTypes, 
+    getProblemOrdersByTechnician,
     getAvgWeeklyVisitsByTechnician
  } from "../controllers/stats.controller.js";
  import { authRequired } from "../middlewares/auth.middleware.js";
@@ -20,6 +21,7 @@ router.get("/closed-by-day", authRequired, getClosedOrdersByDay)
 router.get("/orders/status", authRequired, getOrderStatusSummary);
 router.get("/visits/types", authRequired, getVisitTypes);
 router.get("/resolution/technician-effectiveness", authRequired, getAvgWeeklyVisitsByTechnician);
+router.get("/problems-by-technician", authRequired, getProblemOrdersByTechnician);
 router.get("/reportWeek", authRequired, getClosedOrdersForReport)
 
 export default router;

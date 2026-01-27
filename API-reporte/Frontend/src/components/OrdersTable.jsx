@@ -70,12 +70,43 @@ export default function OrdersTable({ orders }) {
       const matchesStatus = filters.status ? lastVisit.status === filters.status : true;
       const matchesTech = filters.technician ? lastVisit.technician === filters.technician : true;
       const matchesClosedBy = filters.closedBy ? lastVisit.closedBy === filters.closedBy : true;
-      const matchesVisitDate = filters.visitDate
-        ? lastVisit.visitDate?.slice(0, 10) === filters.visitDate
-        : true;
-      const matchesCloseDate = filters.closeDate
-        ? lastVisit.closeDate?.slice(0, 10) === filters.closeDate
-        : true;
+      const matchesVisitAndCloseDate = (() => {
+      const visitDate = lastVisit?.visitDate
+        ? new Date(lastVisit.visitDate)
+        : null;
+
+      const closeDate = lastVisit?.closeDate
+        ? new Date(lastVisit.closeDate)
+        : null;
+
+      const from = filters.visitDate ? new Date(filters.visitDate) : null;
+      const to = filters.closeDate ? new Date(filters.closeDate) : null;
+
+      // Si no hay ningún filtro de fechas
+      if (!from && !to) return true;
+
+      // Solo fecha desde
+      if (from && !to) {
+        return (
+          (visitDate && visitDate >= from) ||
+          (closeDate && closeDate >= from)
+        );
+      }
+
+      // Solo fecha hasta
+      if (!from && to) {
+        return (
+          (visitDate && visitDate <= to) ||
+          (closeDate && closeDate <= to)
+        );
+      }
+
+      // Rango completo (OR)
+      return (
+        (visitDate && visitDate >= from && visitDate <= to) ||
+        (closeDate && closeDate >= from && closeDate <= to)
+      );
+    })();
       const matchesCreated = filters.createdAt
         ? o.createdAt?.slice(0, 10) === filters.createdAt
         : true;
@@ -95,8 +126,7 @@ export default function OrdersTable({ orders }) {
         matchesStatus &&
         matchesTech &&
         matchesClosedBy &&
-        matchesVisitDate &&
-        matchesCloseDate &&
+        matchesVisitAndCloseDate &&
         matchesCreated &&
         matchesReportCode &&
         matchesReportStatus &&
@@ -225,7 +255,7 @@ export default function OrdersTable({ orders }) {
                 Zona ▼
                 {openFilter === "zona" && (
                   <div className="filter-dropdown">
-                    {["Florencio Varela", "Quilmes"].map((z) => (
+                    {["Florencio Varela", "Quilmes", "La Colorada"].map((z) => (
                       <div key={z} onClick={() => handleFilterChange("zona", z)}>
                         {z}
                       </div>

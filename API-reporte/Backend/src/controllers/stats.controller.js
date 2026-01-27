@@ -67,7 +67,10 @@ export const getTopAgents = async (req, res) => {
       {
         $match: {
           "lastVisit.status": { $regex: /^cerrada$/i },
-          "lastVisit.visitDate": { $gte: new Date(from), $lte: new Date(to) }
+          "lastVisit.closeDate": {
+            $gte: new Date(from),
+            $lte: new Date(to)
+          }
         }
       },
 
@@ -120,7 +123,7 @@ export const getClosedOrdersByZone = async (req, res) => {
     ]);
 
     // Asegurar siempre que las dos zonas aparezcan aunque tengan 0
-    const zones = ["Florencio Varela", "Quilmes"];
+    const zones = ["Florencio Varela", "Quilmes", "La Colorada"];
     const result = zones.map(z => {
       const found = data.find(d => d._id === z);
       return { _id: z, count: found ? found.count : 0 };
@@ -132,7 +135,6 @@ export const getClosedOrdersByZone = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 // Órdenes abiertas / cerradas en un rango de fechas
 export const getOrderStatusSummary = async (req, res) => {
@@ -173,7 +175,6 @@ export const getOrderStatusSummary = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 // Tipos de visitas
 export const getVisitTypes = async (req, res) => {
@@ -334,3 +335,58 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const getProblemOrdersByTechnician = async (req, res) => {
+  let { from, to } = req.query;
+
+  if (!from || !to) {
+    const range = getCurrentWeekRange(); // debe devolver fechas YYYY-MM-DD
+    from = range.from;
+    to = range.to;
+  }
+
+  // 🔥 convertir a UTC puro
+  const fromDate = new Date(`${from}T00:00:00.000Z`);
+  const toDate   = new Date(`${to}T23:59:59.999Z`);
+
+  try {
+    const data = await Order.aggregate([
+      { $unwind: "$visits" },
+
+      {
+        $match: {
+          "visits.reportCode": { $nin: [null, ""] },
+          "visits.technician": { $nin: [null, ""] },
+          "visits.visitDate": {
+            $gte: fromDate,
+            $lte: toDate
+          }
+        }
+      },
+
+      {
+        $group: {
+          _id: "$visits.technician",
+          orders: {
+            $push: {
+              client: "$clientNumber",
+              status: "$visits.status",
+              obs: "$visits.observation",
+              reportCode: "$visits.reportCode",
+              visit: "$visits.visitDate",
+              close: "$visits.closeDate" // puede no existir y está perfecto
+            }
+          }
+        }
+      },
+
+      { $sort: { "_id": 1 } }
+    ]);
+
+    res.json(data);
+  } catch (err) {
+    console.error("Error problemas por técnico:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+

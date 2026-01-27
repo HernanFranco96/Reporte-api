@@ -155,6 +155,7 @@ export default function OrderForm({
           <option value="">Seleccione Zona</option>
           <option value="Florencio Varela">Florencio Varela</option>
           <option value="Quilmes">Quilmes</option>
+          <option value="La Colorada">La Colorada</option>
         </select>
 
         <select name="status" value={form.status} onChange={handleChange} required>

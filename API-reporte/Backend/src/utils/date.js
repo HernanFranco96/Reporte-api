@@ -13,3 +13,18 @@ export const getCurrentWeekRange = () => {
 
   return { from: monday, to: sunday };
 };
+
+export const getCurrentWeekRanges = () => {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = domingo
+
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayOfWeek);
+  sunday.setHours(0, 0, 0, 0);
+
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  saturday.setHours(23, 59, 59, 999);
+
+  return { from: sunday, to: saturday };
+};

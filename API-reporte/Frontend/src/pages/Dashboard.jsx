@@ -22,6 +22,15 @@ const checkPageBreak = (pdf, y, neededHeight) => {
   return y;
 };
 
+const calcVariation = (current, previous) => {
+    if (!previous) return { diff: 0, pct: 0 };
+
+    const diff = current - previous;
+    const pct = Math.round((diff / previous) * 100);
+
+    return { diff, pct };
+  };
+
 export default function Dashboard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -33,7 +42,7 @@ export default function Dashboard() {
   const [typeData, setTypeData] = useState([]);
   const [techEffectiveness, setTechEffectiveness] = useState([]);
   const [dailyClosedData, setDailyClosedData] = useState([]);
-
+  const [problemByTech, setProblemByTech] = useState([]);
   const [prevAgentData, setPrevAgentData] = useState([]);
   const [prevTechData, setPrevTechData] = useState([]);
 
@@ -63,6 +72,10 @@ export default function Dashboard() {
     (acc, a) => acc + (a.closedOrders || 0),
     0
   );
+
+  
+  const techVar = calcVariation(totalTechVisits, prevTechTotal);
+  const agentVar = calcVariation(totalAgentClosed, prevAgentTotal);
 
   const fetchData = (fromParam, toParam) => {
     const params = {
@@ -143,6 +156,9 @@ export default function Dashboard() {
     api.get(`/stats/reportWeek`, { params })
       .then(res => setOrdersRaw(res.data))
       .catch(console.error);
+
+    api.get("/stats/problems-by-technician", { params })
+      .then(res => setProblemByTech(res.data))
   };
 
   const addPageTitle = (pdf, title, subtitle = "") => {
@@ -365,40 +381,66 @@ const toLocalDateOnly = (d) => {
   );
 };
 
-const buildProblemRowsByTechnicianThisWeek = (orders, technicians) => {
-  const rows = orders.flatMap(order => {
-    if (!Array.isArray(order.visits) || order.visits.length === 0) {
-      return [];
-    }
+const isDateInRange = (date, from, to) => {
+  if (!date) return false;
 
-    return order.visits
-      .filter(v => v.reportCode && v.reportCode.trim())
-      .filter(v => technicians.includes(v.technician))
-      .filter(v => {
-        const visitDate = toLocalDateOnly(v.visitDate);
-        const fromLocal = toLocalDateOnly(from);
-        const toLocal = toLocalDateOnly(to);
-        return visitDate >= fromLocal && visitDate <= toLocal;
-      })
-      .map(v => ({
-        technician: v.technician,
-        client: order.clientNumber,
-        status: v.status || "-",
-        obs: `Reporte: ${v.reportCode}\n${v.observation || "-"}`,
-        visit: formatDate(v.visitDate),
-        close: v.closeDate ? formatDate(v.closeDate) : "-"
-      }));
-  });
-
-  // 🔽 AGRUPAR POR TÉCNICO
-  return rows.reduce((acc, row) => {
-    if (!acc[row.technician]) {
-      acc[row.technician] = [];
-    }
-    acc[row.technician].push(row);
-    return acc;
-  }, {});
+  const d = toLocalDateString(date);
+  return d >= from && d <= to;
 };
+
+const toLocalDateString = (d) => {
+  const date = new Date(d);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+
+// const getProblemRelevantDate = (visit) =>
+//   visit.closeDate || visit.visitDate;
+
+// const normalizeTech = (t) => t.trim().toLowerCase();
+
+// const buildProblemRowsByTechnicianThisWeek = (orders, technicians) => {
+//   const techMap = {}; // key normalizada → nombre visible
+
+//   technicians.forEach(t => {
+//     techMap[normalizeTech(t)] = t.trim();
+//   });
+
+//   const grouped = {};
+
+//   orders.forEach(order => {
+//     (order.visits || []).forEach(v => {
+//       if (!v.reportCode || !v.reportCode.trim()) return;
+//       if (!v.technician) return;
+
+//       const techKey = normalizeTech(v.technician);
+//       if (!techMap[techKey]) return;
+
+//       const dateToCheck = getProblemRelevantDate(v);
+//       if (!isDateInRange(dateToCheck, from, to)) return;
+
+//       grouped[techKey] ??= {
+//         name: techMap[techKey],
+//         rows: []
+//       };
+
+//       grouped[techKey].rows.push({
+//         technician: techMap[techKey],
+//         client: order.clientNumber,
+//         status: v.status || "-",
+//         obs: `Reporte: ${v.reportCode}\n${v.observation || "-"}`,
+//         visit: formatDate(v.visitDate),
+//         close: v.closeDate ? formatDate(v.closeDate) : "-"
+//       });
+//     });
+//   });
+
+//   return grouped;
+// };
+
 
   // Función exportar PDF
 const exportPDF = async () => {
@@ -699,32 +741,37 @@ const exportPDF = async () => {
       // TABLAS: ÓRDENES CON PROBLEMAS POR TÉCNICO (SEMANA ACTUAL)
       // ======================
 
-      const TECHNICIANS = ["Gustavo", "Gionet"];
+      // const TECHNICIANS = [
+      //     ...new Set(
+      //       ordersRaw.flatMap(order =>
+      //         (order.visits || [])
+      //           .filter(v => v.reportCode && v.reportCode.trim())
+      //           .map(v => v.technician?.trim())
+      //           .filter(Boolean)
+      //       )
+      //     )
+      //   ];
 
-      const groupedRows = buildProblemRowsByTechnicianThisWeek(
-        ordersRaw,
-        TECHNICIANS
-      );
+      // const groupedRows = buildProblemRowsByTechnicianThisWeek(
+      //   ordersRaw,
+      //   TECHNICIANS
+      // );
 
-      Object.entries(groupedRows).forEach(([technician, rows]) => {
-        if (rows.length === 0) return;
-
-        const tableHeight = estimateTableHeight(pdf, rows);
-
-        if (y + tableHeight > PAGE_HEIGHT - MARGIN_BOTTOM) {
-          pdf.addPage();
-          y = 10;
-        }
-
+      problemByTech.forEach(t => {
         y = drawTable(
           pdf,
           y,
-          `Órdenes con problemas – ${technician}`,
-          rows
+          `Órdenes con problemas – ${t._id}`,
+          t.orders.map(o => ({
+            client: o.client,
+            status: o.status,
+            obs: `Reporte: ${o.reportCode}\n${o.obs}`,
+            visit: formatDate(o.visit),
+            close: o.close ? formatDate(o.close) : "-"
+          }))
         );
-
-        y = drawDivider(pdf, y);
       });
+
 
     }
 
@@ -768,44 +815,53 @@ const exportPDF = async () => {
     pdf.save(`dashboard_${from}_to_${to}.pdf`);
   };
 
-  // Función semana anterior
-  const getPreviousWeekRange = () => {
-    const now = new Date();
-    const day = now.getDay();
-
-    const end = new Date(now);
-    end.setDate(now.getDate() - day - 1);
-    end.setHours(23,59,59,999);
-
-    const start = new Date(end);
-    start.setDate(end.getDate() - 6);
-    start.setHours(0,0,0,0);
-
-    const f = d => d.toISOString().split("T")[0];
-    return { from: f(start), to: f(end) };
+  const parseLocalDate = (str) => {
+    const [y, m, d] = str.split("-");
+    return new Date(Number(y), Number(m) - 1, Number(d));
   };
 
-  const getCurrentWeekRangeFrontend = () => {
-    const now = new Date();
-    const dayOfWeek = now.getDay(); 
+  // Función semana anterior
+const getPreviousWeekRange = () => {
+  const { from } = getCurrentWeekRangeFrontend();
 
-    // Retrocedemos al domingo
-    const sunday = new Date(now);
-    sunday.setDate(now.getDate() - dayOfWeek);
-    sunday.setHours(0, 0, 0, 0);
+  const start = parseLocalDate(from);
+  start.setDate(start.getDate() - 7);
 
-    // Avanzamos al sábado
-    const saturday = new Date(sunday);
-    saturday.setDate(sunday.getDate() + 6);
-    saturday.setHours(23, 59, 59, 999);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
 
-    // Formatear para input[type="date"]
-    const formatDate = d => d.toISOString().split("T")[0];
+  return {
+    from: formatLocalDate(start),
+    to: formatLocalDate(end)
+  };
+};
 
-    return {
-      from: formatDate(sunday),
-      to: formatDate(saturday)
-    };
+const getCurrentWeekRangeFrontend = () => {
+  const now = new Date();
+  const day = now.getDay(); // 0 = domingo
+
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - day);
+  sunday.setHours(0, 0, 0, 0);
+
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  saturday.setHours(23, 59, 59, 999);
+
+  return {
+    from: formatLocalDate(sunday),
+    to: formatLocalDate(saturday)
+  };
+};
+
+
+
+  const formatLocalDate = (d) => {
+    const date = new Date(d);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   };
 
   const clearFilter = () => {
@@ -817,6 +873,9 @@ const exportPDF = async () => {
 
   useEffect(() => {
     if (location.state?.refresh) {
+      const { from, to } = getCurrentWeekRangeFrontend();
+      setFrom(from);
+      setTo(to);
       fetchData(from, to);
 
       navigate(location.pathname, { replace: true, state: {} });
@@ -859,64 +918,32 @@ const exportPDF = async () => {
     return COLORS[Math.abs(hash) % COLORS.length];
   };
 
-  const totalTypeVisits = typeData.reduce((a, b) => a + b.value, 0);
-  const totalStatusOrders = statusData.reduce((a, b) => a + b.value, 0);
-
-  const createPieLabel = (total) => ({
-    cx,
-    cy,
-    midAngle,
-    outerRadius,
-    value
-  }) => {
-    const RAD = Math.PI / 180;
-
-    // Distancia base + extra según ángulo
-    const baseOffset = 18;
-    const verticalBoost =
-      Math.abs(Math.sin(midAngle * RAD)) > 0.85 ? 10 : 0;
-
-    const r = outerRadius + baseOffset + verticalBoost;
-
-    const x = cx + r * Math.cos(-midAngle * RAD);
-    const y = cy + r * Math.sin(-midAngle * RAD);
-
-    const percent = total
-      ? Math.round((value / total) * 100)
-      : 0;
-
-    if (percent < 5) return null;
-
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="#374151"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={13}
-        fontWeight={600}
-      >
-        {value}
-        <tspan fontSize={11} fill="#6b7280">
-          {` (${percent}%)`}
-        </tspan>
-      </text>
-    );
-  };
-
   const formattedData = (dailyClosedData || []).map(d => ({
-    date: d.date, 
+    date: d.date,
     count: d.count
   }));
-
-  const chartHeight = Math.max(techEffectiveness.length * 60, 200);
 
   const getEffectivenessColor = (value) => {
     if (value >= 80) return "#22c55e"; // verde
     if (value >= 50) return "#eab308"; // amarillo
     return "#ef4444";                 // rojo
   };
+
+  const avgEffectivenessWeighted = techEffectiveness.reduce(
+    (acc, t) => {
+      acc.ok += t.ok;
+      acc.total += t.total;
+      return acc;
+    },
+    { ok: 0, total: 0 }
+  );
+
+  const effectiveness =
+    avgEffectivenessWeighted.total
+      ? Math.round(
+          (avgEffectivenessWeighted.ok / avgEffectivenessWeighted.total) * 100
+        )
+      : 0;
 
   return (
     <div className="dashboard" id="dashboard-content">
@@ -941,6 +968,32 @@ const exportPDF = async () => {
       </div>
 
       <h3 className="date-range">Mostrando datos desde <span>{from}</span> hasta <span>{to}</span></h3>
+
+      {/* KPIS */}
+      <h2>Efectividad global (sin reporte)</h2>
+      <section className="kpis">
+        <div className="kpi success">
+          <h4>Total visitas técnicas</h4>
+          <span>{totalTechVisits}</span>
+
+          {prevTechTotal > 0 && (
+            <small className={techVar.diff >= 0 ? "up" : "down"}>
+              {techVar.diff >= 0 ? "↑" : "↓"} {Math.abs(techVar.diff)} ({techVar.pct}%)
+            </small>
+          )}
+
+        </div>
+
+        <div className="kpi">
+          <h4>Órdenes cerradas</h4>
+          <span>{totalAgentClosed}</span>
+        </div>
+
+        <div className="kpi warning">
+          <h4>Efectividad promedio</h4>
+          <span>{effectiveness}%</span>
+        </div>
+      </section>
 
       {/* GRÁFICAS */}
       <section className="charts-section">
@@ -969,187 +1022,176 @@ const exportPDF = async () => {
           </LineChart>
         </ResponsiveContainer>
 
-        <h2>Visitas realizadas por los técnicos</h2>
-        <ResponsiveContainer width="100%" height={300} id="tech-chart">
-          <BarChart data={techData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="cerradas" stackId="a" fill="#00C49F" />
-            <Bar dataKey="pendientes" stackId="a" fill="#ecea4c" />
-            <Bar dataKey="canceladas" stackId="a" fill="#f11b14" />
-          </BarChart>
-        </ResponsiveContainer>
+        <h2>Efectividad de técnicos (órdenes sin reporte)</h2>
 
-        <h2>Órdenes cerradas por agentes</h2>
-        <ResponsiveContainer width="100%" height={300} id="agent-chart">
-          <BarChart data={agentData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="closed" radius={[5,5,0,0]}>
-              {agentData.map((entry, index) => (
-                <Cell
-                  key={`cell-${index}`}
-                  fill={getColorByName(entry.name)}
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div id="tech-effectiveness-chart">
+          <ResponsiveContainer
+            width="100%"
+            height={Math.max(techEffectiveness.length * 55, 220)}
+          >
+            <BarChart
+              data={techEffectiveness}
+              layout="vertical"
+              margin={{ top: 20, right: 40, left: 120, bottom: 20 }}
+              barCategoryGap={12}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              
+              {/* Eje X numérico */}
+              <XAxis type="number" allowDecimals={false} />
+
+              {/* Eje Y con técnicos */}
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={10}
+              />
+
+              {/* Tooltip completo */}
+              <Tooltip
+                content={({ payload }) => {
+                  if (!payload || !payload.length) return null;
+                  const d = payload[0].payload;
+
+                  return (
+                    <div style={{
+                      background: "#fff",
+                      border: "1px solid #ddd",
+                      padding: "8px",
+                      borderRadius: "6px"
+                    }}>
+                      <strong>{d.name}</strong>
+                      <p>Total órdenes: {d.total}</p>
+                      <p>Con problemas: {d.problems}</p>
+                      <p>Sin problemas: {d.ok}</p>
+                      <p>Efectividad: {d.effectiveness}%</p>
+                    </div>
+                  );
+                }}
+              />
+
+              {/* TOTAL DE ÓRDENES */}
+              <Bar
+                dataKey="total"
+                name="Total de órdenes"
+                fill="#9ca3af"
+                barSize={16}
+                radius={[0, 6, 6, 0]}
+              />
+
+              {/* ÓRDENES CON PROBLEMAS */}
+              <Bar
+                dataKey="problems"
+                name="Órdenes con problemas"
+                barSize={16}
+                radius={[0, 6, 6, 0]}
+              >
+                {techEffectiveness.map((t, i) => (
+                  <Cell
+                    key={i}
+                    fill={getEffectivenessColor(t.effectiveness)}
+                  />
+                ))}
+              </Bar>
+
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="grid-2">
+          <div>
+            <h2>Visitas realizadas por los técnicos</h2>
+            <ResponsiveContainer width="100%" height={300} id="tech-chart">
+              <BarChart data={techData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="cerradas" stackId="a" fill="#00C49F" />
+                <Bar dataKey="pendientes" stackId="a" fill="#ecea4c" />
+                <Bar dataKey="canceladas" stackId="a" fill="#f11b14" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div>
+            <h2>Órdenes cerradas por agentes</h2>
+            <ResponsiveContainer width="100%" height={300} id="agent-chart">
+              <BarChart data={agentData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="closed" radius={[5,5,0,0]}>
+                  {agentData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={getColorByName(entry.name)}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
         <div className="pie-charts">
           <div className="pie-container">
             <h2>Órdenes abiertas / cerradas</h2>
-            <ResponsiveContainer width="100%" height={260} id="status-chart">
-              <PieChart>
-                <Pie
-                  data={statusData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  label={createPieLabel(totalStatusOrders)}
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="pie-container">
-            <h2>Órdenes cerradas por zona</h2>
-            <div id="zone-chart" className="pie-chart-wrapper">
+            <div id="status-chart">
               <ResponsiveContainer width="100%" height={260}>
-                <PieChart>
-                  <Pie
-                    data={closedByZoneData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label={createPieLabel(closedByZoneData.reduce((a,b)=>a+b.value,0))}
-                  >
-                    {closedByZoneData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
+                <BarChart
+                  data={statusData}
+                  layout="vertical"
+                  margin={{ left: 100 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="name" width={10} />
                   <Tooltip />
-                </PieChart>
+                  <Bar dataKey="value" fill="#3b82f6" />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           <div className="pie-container">
-            <h2>Tipos de visitas</h2>
-            <ResponsiveContainer width="100%" height={260} id="type-chart">
-              <PieChart>
-                <Pie
-                  data={typeData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  label={createPieLabel(totalTypeVisits)}
-                >
-                  {typeData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+            <h2>Órdenes cerradas por zona</h2>
+              <div id="zone-chart">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart
+                    data={[...closedByZoneData].sort((a,b)=>b.value-a.value)}
+                    layout="vertical"
+                    margin={{ left: 70, right: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={10} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#22c55e" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
           </div>
-        </div>
 
-        <h2>Efectividad de técnicos (órdenes sin reporte)</h2>
-
-        <div id="tech-effectiveness-chart">
-        <ResponsiveContainer
-          width="100%"
-          height={Math.max(techEffectiveness.length * 55, 220)}
-        >
-          <BarChart
-            data={techEffectiveness}
-            layout="vertical"
-            margin={{ top: 20, right: 40, left: 120, bottom: 20 }}
-            barCategoryGap={12}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            
-            {/* Eje X numérico */}
-            <XAxis type="number" allowDecimals={false} />
-
-            {/* Eje Y con técnicos */}
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={100}
-            />
-
-            {/* Tooltip completo */}
-            <Tooltip
-              content={({ payload }) => {
-                if (!payload || !payload.length) return null;
-                const d = payload[0].payload;
-
-                return (
-                  <div style={{
-                    background: "#fff",
-                    border: "1px solid #ddd",
-                    padding: "8px",
-                    borderRadius: "6px"
-                  }}>
-                    <strong>{d.name}</strong>
-                    <p>Total órdenes: {d.total}</p>
-                    <p>Con problemas: {d.problems}</p>
-                    <p>Sin problemas: {d.ok}</p>
-                    <p>Efectividad: {d.effectiveness}%</p>
-                  </div>
-                );
-              }}
-            />
-
-            {/* TOTAL DE ÓRDENES */}
-            <Bar
-              dataKey="total"
-              name="Total de órdenes"
-              fill="#9ca3af"
-              barSize={16}
-              radius={[0, 6, 6, 0]}
-            />
-
-            {/* ÓRDENES CON PROBLEMAS */}
-            <Bar
-              dataKey="problems"
-              name="Órdenes con problemas"
-              barSize={16}
-              radius={[0, 6, 6, 0]}
-            >
-              {techEffectiveness.map((t, i) => (
-                <Cell
-                  key={i}
-                  fill={getEffectivenessColor(t.effectiveness)}
-                />
-              ))}
-            </Bar>
-
-          </BarChart>
-        </ResponsiveContainer>
+          <div className="pie-container">
+            <h2>Tipos de visitas</h2>
+              <div id="type-chart">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart
+                    data={typeData}
+                    layout="vertical"
+                    margin={{ left: 70, right: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis type="category" dataKey="name" width={10} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#f59e0b" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+          </div>
         </div>
       </section>
     </div>

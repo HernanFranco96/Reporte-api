@@ -1,5 +1,5 @@
 import Order from "../models/Order.js";
-import { getCurrentWeekRange } from "../utils/date.js"
+import { getCurrentWeekRanges } from "../utils/date.js"
 
 export const getOrder = async (req, res) => {
     try {
@@ -95,7 +95,7 @@ export const getClosedOrdersByDay = async (req, res) => {
     let from, to; 
 
     if (!req.query.from || !req.query.to) {
-      const range = getCurrentWeekRange(); // { from: Date, to: Date }
+      const range = getCurrentWeekRanges(); // { from: Date, to: Date }
       from = new Date(range.from);
       to = new Date(range.to);
     } else {

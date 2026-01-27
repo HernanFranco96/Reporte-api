@@ -14,7 +14,7 @@ const visitSchema = new mongoose.Schema(
     },
     zona: {
       type: String,
-      enum: ["Florencio Varela", "Quilmes"],
+      enum: ["Florencio Varela", "Quilmes", "La Colorada"],
       required: true
     },
     reportCode: String,

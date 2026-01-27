@@ -1,13 +1,14 @@
-// src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
 import { jwtDecode } from "jwt-decode";
-import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import api from "../api/axios";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Restaurar sesión
   useEffect(() => {
@@ -17,7 +18,6 @@ export function AuthProvider({ children }) {
       try {
         const decoded = jwtDecode(token);
 
-        // token expirado
         if (decoded.exp * 1000 < Date.now()) {
           localStorage.removeItem("token");
         } else {
@@ -26,7 +26,7 @@ export function AuthProvider({ children }) {
             role: decoded.role
           });
 
-          axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+          api.defaults.headers.common.Authorization = `Bearer ${token}`;
         }
       } catch {
         localStorage.removeItem("token");
@@ -36,24 +36,55 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
+  // Interceptor global
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      res => res,
+      error => {
+        if (error.response?.status === 401) {
+          logout();
+          navigate("/login");
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return () => {
+      api.interceptors.response.eject(interceptor);
+    };
+  }, []);
+
+  // Detectar token faltante
+  useEffect(() => {
+    const onStorageChange = () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        logout();
+      }
+    };
+
+    window.addEventListener("storage", onStorageChange);
+    return () => window.removeEventListener("storage", onStorageChange);
+  }, []);
+
   // Login
   const login = async (email, password) => {
-    const res = await axios.post(
-      "http://192.168.131.141:3000/api/auth/login",
-      { email: email.trim(), password: password.trim() }
-    );
+    const res = await api.post("/auth/login", {
+      email: email.trim(),
+      password: password.trim()
+    });
 
     const { token, user } = res.data;
 
     localStorage.setItem("token", token);
-    axios.defaults.headers.common.Authorization = `Bearer ${token}`;
+    api.defaults.headers.common.Authorization = `Bearer ${token}`;
     setUser(user);
   };
 
   // Logout
   const logout = () => {
     localStorage.removeItem("token");
-    delete axios.defaults.headers.common.Authorization;
+    delete api.defaults.headers.common.Authorization;
     setUser(null);
   };
 

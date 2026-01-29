@@ -90,12 +90,12 @@ export const getClosedOrdersForReport = async (req, res) => {
   res.json(orders);
 };
 
-export const getClosedOrdersByDay = async (req, res) => {
+export const getOrdersByDayAndStatus = async (req, res) => {
   try {
-    let from, to; 
+    let from, to;
 
     if (!req.query.from || !req.query.to) {
-      const range = getCurrentWeekRanges(); // { from: Date, to: Date }
+      const range = getCurrentWeekRanges();
       from = new Date(range.from);
       to = new Date(range.to);
     } else {
@@ -103,74 +103,89 @@ export const getClosedOrdersByDay = async (req, res) => {
       to = new Date(req.query.to);
     }
 
-    // Ajustar horas para incluir todo el día
     from.setHours(0, 0, 0, 0);
     to.setHours(23, 59, 59, 999);
 
-    // Buscar solo la última visita cerrada
     const data = await Order.aggregate([
-      // Filtrar solo visitas cerradas
+      // 1️⃣ Desarmar visitas
+      { $unwind: "$visits" },
+
+      // 2️⃣ Normalizar fecha efectiva
       {
         $addFields: {
-          closedVisits: {
-            $filter: {
-              input: "$visits",
-              as: "v",
-              cond: { $eq: ["$$v.status", "Cerrada"] }
+          visitStatus: "$visits.status",
+          visitDate: {
+            $ifNull: ["$visits.closeDate", "$visits.visitDate"]
+          }
+        }
+      },
+
+      // 3️⃣ Filtrar por rango
+      {
+        $match: {
+          visitDate: { $gte: from, $lte: to }
+        }
+      },
+
+      // 4️⃣ Ordenar visitas por orden + fecha
+      {
+        $sort: {
+          _id: 1,
+          visitDate: 1
+        }
+      },
+
+      // 5️⃣ Detectar cambio de estado
+      {
+        $setWindowFields: {
+          partitionBy: "$_id",
+          sortBy: { visitDate: 1 },
+          output: {
+            prevStatus: {
+              $shift: {
+                output: "$visitStatus",
+                by: -1
+              }
             }
           }
         }
       },
-      // Tomar la visita cerrada más reciente (según closeDate)
+
+      // 6️⃣ Quedarse solo con cambios de estado
       {
-        $addFields: {
-          lastClosedVisit: {
-            $arrayElemAt: [
-              { $slice: [ { $reverseArray: { $sortArray: { input: "$closedVisits", sortBy: { closeDate: 1 } } } }, 1 ] },
-              0
+        $match: {
+          $expr: {
+            $or: [
+              { $eq: ["$prevStatus", null] },       // primer estado
+              { $ne: ["$visitStatus", "$prevStatus"] } // cambio real
             ]
           }
         }
       },
-      // Filtrar por rango de fechas
-      {
-        $match: {
-          "lastClosedVisit.closeDate": { $gte: from, $lte: to }
-        }
-      },
-      // Contar por día
+
+      // 7️⃣ Agrupar por día + estado
       {
         $group: {
           _id: {
-            $dateToString: { 
-              format: "%Y-%m-%d",
-              date: "$lastClosedVisit.closeDate",
-              timezone: "America/Argentina/Buenos_Aires"
-            }
+            date: {
+              $dateToString: {
+                format: "%Y-%m-%d",
+                date: "$visitDate",
+                timezone: "America/Argentina/Buenos_Aires"
+              }
+            },
+            status: "$visitStatus"
           },
           count: { $sum: 1 }
         }
       },
-      { $sort: { "_id": 1 } }
+
+      { $sort: { "_id.date": 1 } }
     ]);
 
-    // Generar todos los días del rango
-    const allDays = [];
-    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
-      const yyyy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      allDays.push(`${yyyy}-${mm}-${dd}`);
-    }
-
-    const dataMap = {};
-    data.forEach(d => { dataMap[d._id] = d.count; });
-
-    const result = allDays.map(day => ({ date: day, count: dataMap[day] || 0 }));
-
-    res.json(result);
+    res.json(data);
   } catch (err) {
-    console.error("Error getClosedOrdersByDay:", err);
+    console.error("Error getOrdersByDayAndStatus:", err);
     res.status(500).json({ message: err.message });
   }
 };

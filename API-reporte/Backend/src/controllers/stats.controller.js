@@ -218,75 +218,93 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
 
   try {
     const result = await Order.aggregate([
-      // Desarmar visitas
+      // 1️⃣ Desarmar visitas
       { $unwind: "$visits" },
 
-      // Filtrar visitas dentro del rango
+      // 2️⃣ Normalizar flags
       {
-        $match: {
-          "visits.visitDate": {
-            $gte: new Date(from),
-            $lte: new Date(to)
+        $addFields: {
+          hasProblemVisit: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ["$visits.reportCode", null] },
+                  { $ne: ["$visits.reportCode", ""] }
+                ]
+              },
+              1,
+              0
+            ]
+          },
+          isClosedVisit: {
+            $cond: [{ $eq: ["$visits.status", "Cerrada"] }, 1, 0]
+          },
+          effectiveDate: {
+            $ifNull: ["$visits.closeDate", "$visits.visitDate"]
           }
         }
       },
 
-      // Obtener semana ISO
-      {
-        $addFields: {
-          visitDay: {
-            $dateTrunc: { date: "$visits.visitDate", unit: "day" }
-          }
-        }
-      },
-      {
-        $addFields: {
-          week: { $isoWeek: "$visitDay" },
-          year: { $isoWeekYear: "$visitDay" }
-        }
-      },
-
-      // Agrupar por técnico + orden + semana
+      // 3️⃣ Agrupar por orden + técnico
       {
         $group: {
           _id: {
-            technician: "$visits.technician",
             orderId: "$_id",
-            year: "$year",
-            week: "$week"
+            technician: "$visits.technician"
           },
-          // Si ALGUNA visita tuvo reportCode → problema
-          hasProblem: {
+          hasProblem: { $max: "$hasProblemVisit" },
+          wasClosed: { $max: "$isClosedVisit" },
+          closedDate: {
             $max: {
               $cond: [
-                {
-                  $and: [
-                    { $ne: ["$visits.reportCode", null] },
-                    { $ne: ["$visits.reportCode", ""] }
-                  ]
-                },
-                1,
-                0
+                { $eq: ["$visits.status", "Cerrada"] },
+                "$effectiveDate",
+                null
               ]
             }
           }
         }
       },
 
-      // Contar órdenes por semana
+      // 4️⃣ Solo órdenes cerradas
+      { $match: { wasClosed: 1 } },
+
+      // 5️⃣ Filtrar cierres dentro del rango semanal
+      {
+        $match: {
+          closedDate: {
+            $gte: new Date(from),
+            $lte: new Date(to)
+          }
+        }
+      },
+
+      // 6️⃣ Semana ISO
+      {
+        $addFields: {
+          week: { $isoWeek: "$closedDate" },
+          year: { $isoWeekYear: "$closedDate" }
+        }
+      },
+
+      // 7️⃣ Agrupar por técnico + semana
       {
         $group: {
           _id: {
             technician: "$_id.technician",
-            year: "$_id.year",
-            week: "$_id.week"
+            year: "$year",
+            week: "$week"
           },
           totalOrders: { $sum: 1 },
-          ordersWithProblem: { $sum: "$hasProblem" }
+          ordersWithProblem: {
+            $sum: {
+              $cond: ["$hasProblem", 1, 0]
+            }
+          }
         }
       },
 
-      // Consolidar por técnico
+      // 8️⃣ Consolidar por técnico
       {
         $group: {
           _id: "$_id.technician",
@@ -295,10 +313,9 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
         }
       },
 
-      // Calcular efectividad
+      // 9️⃣ Calcular efectividad
       {
         $project: {
-          _id: 1,
           totalOrders: 1,
           ordersWithProblem: 1,
           effectiveness: {
@@ -335,6 +352,7 @@ export const getAvgWeeklyVisitsByTechnician = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
 
 export const getProblemOrdersByTechnician = async (req, res) => {
   let { from, to } = req.query;
